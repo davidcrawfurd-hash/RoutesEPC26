@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Europa Power Conference 2026 — Routes</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
   <style>
     html, body {
       margin: 0;
@@ -62,6 +61,10 @@
       min-width: 46px;
     }
 
+    .row button:hover {
+      background: #086042;
+    }
+
     .modes {
       display: flex;
       gap: 6px;
@@ -97,6 +100,8 @@
       border-radius: 8px;
       display: none;
       line-height: 1.5;
+      max-height: 150px;
+      overflow-y: auto;
     }
 
     #map {
@@ -110,6 +115,16 @@
     .leaflet-popup-content-wrapper,
     .leaflet-popup-tip {
       border-radius: 10px;
+    }
+
+    .loading {
+      display: inline-block;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
@@ -131,7 +146,7 @@
       <button class="mode active" data-mode="foot-walking">🚶 Walk</button>
       <button class="mode" data-mode="cycling-regular">🚲 Bike</button>
       <button class="mode" data-mode="driving-car">🚗 Drive</button>
-      <button class="mode" data-mode="public-transport">🚆 Transit</button>
+      <button class="mode" data-mode="transit">🚆 Transit</button>
     </div>
 
     <div id="info"></div>
@@ -140,9 +155,10 @@
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
   <script>
-    const FALLBACK_POINTS = [
+    const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI2OTZjM2U2YTE5ZDQ3YTNhMmYyZjU5MWNlZmNkMjlkIiwiaCI6Im11cm11cjY0In0=";
+
+    const POINTS = [
       { name: "Train Station (Gare de Strasbourg)", lat: 48.5851, lon: 7.7346 },
       { name: "AC Marriott Strasbourg", lat: 48.5836, lon: 7.7480 },
       { name: "BOMA Hostel", lat: 48.5810, lon: 7.7405 },
@@ -156,271 +172,30 @@
       { name: "Parlement Européen", lat: 48.5970, lon: 7.7690 }
     ];
 
-    const UMAP_URLS = [
-      'https://umap.openstreetmap.fr/en/map/europa-power-conference-2026_1470534/layers.geojson',
-      'https://umap.openstreetmap.fr/en/map/1470534/layers.geojson'
-    ];
-
-    let pointLookup = {};
-    let routeLines = [];
-    let loadedPoints = [...FALLBACK_POINTS];
-
     const map = L.map('map').setView([48.586, 7.74], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
+    const byName = {};
+    const markers = {};
+    POINTS.forEach(p => {
+      byName[p.name] = p;
+      const marker = L.marker([p.lat, p.lon]).addTo(map);
+      marker.bindPopup(`<b>${p.name}</b>`);
+      markers[p.name] = marker;
+    });
+
     const fromSel = document.getElementById('from');
     const toSel = document.getElementById('to');
     const info = document.getElementById('info');
 
-    function createMarkerForPoint(point) {
-      const marker = L.marker([point.lat, point.lon]).addTo(map);
-      marker.bindPopup(`<b>${point.name}</b>`);
-      return marker;
-    }
+    POINTS.forEach(p => {
+      fromSel.add(new Option(p.name, p.name));
+      toSel.add(new Option(p.name, p.name));
+    });
 
-    function populateSelectors(points) {
-      const unique = [...new Map(points.map(p => [p.name, p])).values()];
-      fromSel.innerHTML = '<option value="">From…</option>';
-      toSel.innerHTML = '<option value="">To…</option>';
-      unique.forEach(p => {
-        fromSel.add(new Option(p.name, p.name));
-        toSel.add(new Option(p.name, p.name));
-      });
-    }
-
-    function buildFallbackMap() {
-      FALLBACK_POINTS.forEach(p => {
-        pointLookup[p.name] = p;
-        createMarkerForPoint(p);
-      });
-      loadedPoints = FALLBACK_POINTS;
-      populateSelectors(loadedPoints);
-      routeLines = [];
-    }
-
-    function pointNameFromFeature(feature) {
-      const props = feature && feature.properties ? feature.properties : {};
-      const label = props.name || props.title || props.label || props.popupContent || '';
-      return (label || '').trim();
-    }
-
-    function coordinateFromFeature(feature) {
-      if (!feature || !feature.geometry) return null;
-      const g = feature.geometry;
-      if (g.type === 'Point') {
-        return { lat: g.coordinates[1], lon: g.coordinates[0] };
-      }
-      if (g.type === 'LineString' && g.coordinates.length > 0) {
-        const first = g.coordinates[0];
-        return { lat: first[1], lon: first[0] };
-      }
-      return null;
-    }
-
-    function extractPointFeatures(data) {
-      const points = [];
-
-      if (!data || !data.features) return points;
-
-      data.features.forEach(feature => {
-        if (feature.geometry && feature.geometry.type === 'Point') {
-          const name = pointNameFromFeature(feature);
-          if (!name) return;
-          const coord = coordinateFromFeature(feature);
-          if (!coord) return;
-          points.push({ name, lat: coord.lat, lon: coord.lon });
-        }
-      });
-
-      return points;
-    }
-
-    function extractRouteFeatures(data) {
-      const routes = [];
-
-      if (!data || !data.features) return routes;
-
-      data.features.forEach(feature => {
-        const geom = feature && feature.geometry;
-        if (!geom) return;
-
-        if (geom.type === 'LineString' || geom.type === 'MultiLineString') {
-          const name = pointNameFromFeature(feature) || 'Transit route';
-          const coords = geom.type === 'LineString'
-            ? geom.coordinates
-            : geom.coordinates.flat();
-
-          if (coords && coords.length >= 2) {
-            routes.push({
-              name,
-              color: '#1a73e8',
-              coords: coords.map(c => ({ lat: c[1], lon: c[0] }))
-            });
-          }
-        }
-      });
-
-      return routes;
-    }
-
-    function haversineKm(a, b) {
-      const toRad = deg => deg * Math.PI / 180;
-      const R = 6371;
-      const dLat = toRad(b.lat - a.lat);
-      const dLon = toRad(b.lon - a.lon);
-      const lat1 = toRad(a.lat);
-      const lat2 = toRad(b.lat);
-      const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-      return 2 * R * Math.asin(Math.sqrt(h));
-    }
-
-    function buildTransitGraph(points, routes) {
-      const graph = new Map();
-      const routeStops = new Map();
-
-      points.forEach(point => {
-        graph.set(point.name, []);
-      });
-
-      routes.forEach(route => {
-        const routeStopsList = route.coords.map(coord => {
-          let nearestName = null;
-          let nearestDist = Infinity;
-
-          points.forEach(point => {
-            const dist = haversineKm(point, coord);
-            if (dist < nearestDist) {
-              nearestDist = dist;
-              nearestName = point.name;
-            }
-          });
-
-          return nearestName;
-        }).filter(Boolean);
-
-        const uniqueStops = [...new Set(routeStopsList)];
-        routeStops.set(route.name, uniqueStops);
-
-        uniqueStops.forEach((stop, index) => {
-          if (!graph.has(stop)) graph.set(stop, []);
-          if (index + 1 < uniqueStops.length) {
-            const nextStop = uniqueStops[index + 1];
-            graph.get(stop).push({ to: nextStop, route: route.name, color: route.color });
-            graph.get(nextStop).push({ to: stop, route: route.name, color: route.color });
-          }
-        });
-      });
-
-      return graph;
-    }
-
-    function findTransitPath(graph, start, end) {
-      const queue = [{ stop: start, path: [start] }];
-      const visited = new Set([start]);
-
-      while (queue.length > 0) {
-        const current = queue.shift();
-        if (current.stop === end) return current.path;
-
-        const neighbors = graph.get(current.stop) || [];
-        neighbors.forEach(next => {
-          if (!visited.has(next.to)) {
-            visited.add(next.to);
-            queue.push({ stop: next.to, path: [...current.path, next.to] });
-          }
-        });
-      }
-
-      return null;
-    }
-
-    function renderTransitRoute(fromName, toName) {
-      if (!pointLookup[fromName] || !pointLookup[toName]) {
-        info.style.display = 'block';
-        info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>Unable to map transit between these locations in the loaded UMap data.`;
-        return;
-      }
-
-      const graph = buildTransitGraph(loadedPoints, routeLines);
-      const path = findTransitPath(graph, fromName, toName);
-
-      if (!path) {
-        info.style.display = 'block';
-        info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>No public transport connection was found in the loaded map data. Try another pair or switch to walking/cycling.`;
-        return;
-      }
-
-      const coords = path.map(p => [pointLookup[p].lat, pointLookup[p].lon]);
-      const line = L.polyline(coords, {
-        color: '#1a73e8',
-        weight: 6,
-        opacity: 0.9,
-        dashArray: '10 12'
-      }).addTo(map);
-
-      line.bindPopup(`<b>${fromName}</b> → <b>${toName}</b><br>Public transport route`);
-      info.style.display = 'block';
-      info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>Transit path: ${path.join(' → ')}`;
-      map.fitBounds(line.getBounds(), { padding: [30, 30] });
-    }
-
-    function clearMapRouteLayers() {
-      map.eachLayer(layer => {
-        if (layer instanceof L.Polyline && layer.options && layer.options.dashArray) {
-          map.removeLayer(layer);
-        }
-      });
-      if (control) {
-        map.removeControl(control);
-        control = null;
-      }
-    }
-
-    let control = null;
-
-    function route(fromName, toName) {
-      const a = pointLookup[fromName];
-      const b = pointLookup[toName];
-      if (!a || !b) return;
-
-      clearMapRouteLayers();
-
-      if (mode === 'public-transport') {
-        renderTransitRoute(fromName, toName);
-        return;
-      }
-
-      control = L.Routing.control({
-        waypoints: [L.latLng(a.lat, a.lon), L.latLng(b.lat, b.lon)],
-        router: L.Routing.osrmv1({
-          serviceUrl: 'https://router.project-osrm.org/route/v1',
-          profile: mode
-        }),
-        showAlternatives: false,
-        lineOptions: { styles: [{ color: '#0a7c55', weight: 5 }] },
-        createMarker: () => null
-      }).addTo(map);
-
-      control.on('routesfound', e => {
-        const r = e.routes[0];
-        const km = (r.summary.totalDistance / 1000).toFixed(1);
-        const min = Math.round(r.summary.totalTime / 60);
-        info.style.display = 'block';
-        info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>${km} km · ~${min} min (${modeLabel(mode)})`;
-      });
-    }
-
-    function modeLabel(m) {
-      return {
-        'foot-walking': 'walking',
-        'cycling-regular': 'cycling',
-        'driving-car': 'driving',
-        'public-transport': 'public transport'
-      }[m];
-    }
-
+    let currentRoute = null;
     let mode = 'foot-walking';
 
     document.querySelectorAll('.mode').forEach(btn => {
@@ -444,42 +219,112 @@
       if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
     });
 
-    async function loadMapData() {
-      const errors = [];
-
-      for (const url of UMAP_URLS) {
-        try {
-          const response = await fetch(url, { mode: 'cors' });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const data = await response.json();
-
-          const points = extractPointFeatures(data);
-          const routes = extractRouteFeatures(data);
-
-          if (points.length === 0 && routes.length === 0) {
-            throw new Error('No data found in UMap payload');
-          }
-
-          pointLookup = {};
-          loadedPoints = points.length > 0 ? points : FALLBACK_POINTS;
-          loadedPoints.forEach(p => { pointLookup[p.name] = p; createMarkerForPoint(p); });
-          routeLines = routes;
-          populateSelectors(loadedPoints);
-          info.style.display = 'block';
-          info.innerHTML = 'Loaded locations from the public UMap reference.';
-          return;
-        } catch (err) {
-          errors.push(`${url}: ${err.message}`);
-        }
+    function clearRoute() {
+      if (currentRoute) {
+        map.removeLayer(currentRoute);
+        currentRoute = null;
       }
-
-      buildFallbackMap();
-      info.style.display = 'block';
-      info.innerHTML = 'Using the built-in fallback points because the live UMap source could not be reached.';
     }
 
-    buildFallbackMap();
-    loadMapData();
+    function modeToORSProfile(m) {
+      const profiles = {
+        'foot-walking': 'foot-walking',
+        'cycling-regular': 'cycling-regular',
+        'driving-car': 'driving-car',
+        'transit': 'public-transport'
+      };
+      return profiles[m] || 'foot-walking';
+    }
+
+    function route(fromName, toName) {
+      const a = byName[fromName];
+      const b = byName[toName];
+      if (!a || !b) return;
+
+      clearRoute();
+
+      const profile = modeToORSProfile(mode);
+      const coordinates = [[a.lon, a.lat], [b.lon, b.lat]];
+
+      info.style.display = 'block';
+      info.innerHTML = '<span class="loading">⏳</span> Finding route...';
+
+      const requestBody = {
+        coordinates: coordinates,
+        radiuses: [-1, -1]
+      };
+
+      if (mode === 'transit') {
+        requestBody.schedule = true;
+      }
+
+      fetch(`https://api.openrouteservice.org/v2/directions/${profile}/json`, {
+        method: 'POST',
+        headers: {
+          'Authorization': ORS_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>Error: ${data.error.message || 'Unable to find route'}`;
+          return;
+        }
+
+        if (!data.routes || data.routes.length === 0) {
+          info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>No route found.`;
+          return;
+        }
+
+        const route = data.routes[0];
+        const summary = route.summary;
+        const geometry = route.geometry;
+
+        // Draw route on map
+        const coords = geometry.coordinates || [];
+        if (coords.length > 0) {
+          const latlngs = coords.map(c => [c[1], c[0]]);
+          currentRoute = L.polyline(latlngs, {
+            color: mode === 'transit' ? '#1a73e8' : '#0a7c55',
+            weight: 5,
+            opacity: 0.8,
+            dashArray: mode === 'transit' ? '10 12' : ''
+          }).addTo(map);
+
+          map.fitBounds(currentRoute.getBounds(), { padding: [50, 50] });
+        }
+
+        // Format info
+        const km = (summary.distance / 1000).toFixed(1);
+        const min = Math.round(summary.duration / 60);
+        const modeLabel = mode === 'foot-walking' ? 'walking' :
+                          mode === 'cycling-regular' ? 'cycling' :
+                          mode === 'driving-car' ? 'driving' : 'public transport';
+
+        let infoText = `<b>${fromName}</b> → <b>${toName}</b><br>
+                        ${km} km · ~${min} min (${modeLabel})`;
+
+        // If transit, show detailed steps
+        if (mode === 'transit' && route.segments && route.segments.length > 0) {
+          infoText += '<br><br><strong>Steps:</strong>';
+          route.segments.forEach((seg, idx) => {
+            if (seg.steps && seg.steps.length > 0) {
+              const step = seg.steps[0];
+              const type = step.type || 'walking';
+              const instructions = step.instruction || type;
+              infoText += `<br>${idx + 1}. ${instructions}`;
+            }
+          });
+        }
+
+        info.innerHTML = infoText;
+      })
+      .catch(err => {
+        info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>Error: ${err.message}`;
+      });
+    }
   </script>
 </body>
 </html>
