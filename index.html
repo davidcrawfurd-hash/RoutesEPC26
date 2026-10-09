@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Europa Power Conference 2026 — Routes</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #controls {
+    position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000;
+    background: #fff; padding: 12px; border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2); max-width: 420px;
+  }
+  #controls h1 { font-size: 16px; margin: 0 0 8px; }
+  .row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .row select {
+    flex: 1; padding: 8px; font-size: 14px; border-radius: 6px;
+    border: 1px solid #ccc;
+  }
+  .row button {
+    padding: 8px 12px; border: none; border-radius: 6px;
+    background: #0a7c55; color: #fff; font-size: 14px; cursor: pointer;
+  }
+  .modes { display: flex; gap: 6px; margin-bottom: 8px; }
+  .modes button {
+    flex: 1; padding: 7px; border: 1px solid #ccc; border-radius: 6px;
+    background: #f5f5f5; cursor: pointer; font-size: 13px;
+  }
+  .modes button.active { background: #0a7c55; color: #fff; border-color: #0a7c55; }
+  #info {
+    font-size: 13px; color: #333; min-height: 18px; background: #f0f7f4;
+    padding: 8px; border-radius: 6px; display: none;
+  }
+  #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+</style>
+</head>
+<body>
+<div id="controls">
+  <h1>Europa Power Conference 2026 — Routes</h1>
+  <div class="row">
+    <select id="from"><option value="">From…</option></select>
+    <button id="swap" title="Swap">⇄</button>
+  </div>
+  <div class="row">
+    <select id="to"><option value="">To…</option></select>
+    <button id="go">Go</button>
+  </div>
+  <div class="modes">
+    <button class="mode active" data-mode="foot-walking">🚶 Walk</button>
+    <button class="mode" data-mode="cycling-regular">🚲 Bike</button>
+    <button class="mode" data-mode="driving-car">🚗 Drive</button>
+  </div>
+  <div id="info"></div>
+</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+<script>
+// ---------- Points of interest (name, lat, lon) ----------
+const POINTS = [
+  { name: "Train Station (Gare de Strasbourg)", lat: 48.5851, lon: 7.7346 },
+  { name: "AC Marriott Strasbourg",            lat: 48.5836, lon: 7.7480 },
+  { name: "BOMA Hostel",                        lat: 48.5810, lon: 7.7405 },
+  { name: "Hilton Strasbourg",                  lat: 48.5812, lon: 7.7480 },
+  { name: "IBIS Petite France",                 lat: 48.5796, lon: 7.7412 },
+  { name: "IBIS Styles Nord Palais des Congrès",lat: 48.5960, lon: 7.7390 },
+  { name: "Le Grand Hôtel",                     lat: 48.5838, lon: 7.7450 },
+  { name: "Hôtel de Région Grand Est",          lat: 48.5860, lon: 7.7520 },
+  { name: "Hôtel de Ville",                     lat: 48.5840, lon: 7.7490 },
+  { name: "Palais de la Musique et des Congrès",lat: 48.5960, lon: 7.7380 },
+  { name: "Parlement Européen",                 lat: 48.5970, lon: 7.7690 },
+];
+// ---------- Build the map ----------
+const map = L.map('map').setView([48.586, 7.74], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+// Markers + a lookup by name
+const byName = {};
+POINTS.forEach(p => {
+  byName[p.name] = p;
+  L.marker([p.lat, p.lon]).addTo(map).bindPopup(`<b>${p.name}</b>`);
+});
+// Fill the dropdowns
+const fromSel = document.getElementById('from');
+const toSel = document.getElementById('to');
+POINTS.forEach(p => {
+  fromSel.add(new Option(p.name, p.name));
+  toSel.add(new Option(p.name, p.name));
+});
+// ---------- Routing ----------
+let control = null;
+let mode = 'foot-walking';
+const info = document.getElementById('info');
+document.querySelectorAll('.mode').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
+  });
+});
+document.getElementById('swap').addEventListener('click', () => {
+  const f = fromSel.value, t = toSel.value;
+  fromSel.value = t; toSel.value = f;
+  if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
+});
+document.getElementById('go').addEventListener('click', () => {
+  if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
+});
+function route(fromName, toName) {
+  const a = byName[fromName], b = byName[toName];
+  if (!a || !b) return;
+  if (control) { map.removeControl(control); control = null; }
+  control = L.Routing.control({
+    waypoints: [L.latLng(a.lat, a.lon), L.latLng(b.lat, b.lon)],
+    router: L.Routing.osrmv1({
+      serviceUrl: 'https://router.project-osrm.org/route/v1',
+      profile: mode
+    }),
+    showAlternatives: false,
+    lineOptions: { styles: [{ color: '#0a7c55', weight: 5 }] },
+    createMarker: () => null
+  }).addTo(map);
+  // Show the time summary in our own box
+  control.on('routesfound', e => {
+    const r = e.routes[0];
+    const km = (r.summary.totalDistance / 1000).toFixed(1);
+    const min = Math.round(r.summary.totalTime / 60);
+    info.style.display = 'block';
+    info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>
+      ${km} km · ~${min} min (${modeLabel(mode)})`;
+  });
+}
+function modeLabel(m) {
+  return { 'foot-walking': 'walking', 'cycling-regular': 'cycling', 'driving-car': 'driving' }[m];
+}
+</script>
+</body>
+</html>
