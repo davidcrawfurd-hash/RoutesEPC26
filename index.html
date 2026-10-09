@@ -1,142 +1,485 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Europa Power Conference 2026 — Routes</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
-<style>
-  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
-  #controls {
-    position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000;
-    background: #fff; padding: 12px; border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.2); max-width: 420px;
-  }
-  #controls h1 { font-size: 16px; margin: 0 0 8px; }
-  .row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-  .row select {
-    flex: 1; padding: 8px; font-size: 14px; border-radius: 6px;
-    border: 1px solid #ccc;
-  }
-  .row button {
-    padding: 8px 12px; border: none; border-radius: 6px;
-    background: #0a7c55; color: #fff; font-size: 14px; cursor: pointer;
-  }
-  .modes { display: flex; gap: 6px; margin-bottom: 8px; }
-  .modes button {
-    flex: 1; padding: 7px; border: 1px solid #ccc; border-radius: 6px;
-    background: #f5f5f5; cursor: pointer; font-size: 13px;
-  }
-  .modes button.active { background: #0a7c55; color: #fff; border-color: #0a7c55; }
-  #info {
-    font-size: 13px; color: #333; min-height: 18px; background: #f0f7f4;
-    padding: 8px; border-radius: 6px; display: none;
-  }
-  #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Europa Power Conference 2026 — Routes</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: system-ui, sans-serif;
+      background: #f4f7f7;
+    }
+
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.96);
+      padding: 12px;
+      border-radius: 12px;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+      max-width: 440px;
+      backdrop-filter: blur(4px);
+    }
+
+    #controls h1 {
+      font-size: 16px;
+      margin: 0 0 10px;
+      color: #183a35;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .row select {
+      flex: 1;
+      padding: 9px 10px;
+      font-size: 14px;
+      border-radius: 8px;
+      border: 1px solid #c8d4d1;
+      background: #fff;
+      color: #1d2c2b;
+    }
+
+    .row button {
+      padding: 9px 12px;
+      border: none;
+      border-radius: 8px;
+      background: #0a7c55;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      min-width: 46px;
+    }
+
+    .modes {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .modes button {
+      flex: 1;
+      min-width: 92px;
+      padding: 8px 7px;
+      border: 1px solid #c6d1ce;
+      border-radius: 8px;
+      background: #eef5f4;
+      cursor: pointer;
+      font-size: 13px;
+      color: #1d2c2b;
+    }
+
+    .modes button.active {
+      background: #0a7c55;
+      color: #fff;
+      border-color: #0a7c55;
+    }
+
+    #info {
+      font-size: 13px;
+      color: #243b39;
+      min-height: 18px;
+      background: #edf8f3;
+      border: 1px solid #d7eae1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      display: none;
+      line-height: 1.5;
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+    }
+
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+      border-radius: 10px;
+    }
+  </style>
 </head>
 <body>
-<div id="controls">
-  <h1>Europa Power Conference 2026 — Routes</h1>
-  <div class="row">
-    <select id="from"><option value="">From…</option></select>
-    <button id="swap" title="Swap">⇄</button>
+  <div id="controls">
+    <h1>Europa Power Conference 2026 — Routes</h1>
+
+    <div class="row">
+      <select id="from"><option value="">From…</option></select>
+      <button id="swap" title="Swap">⇄</button>
+    </div>
+
+    <div class="row">
+      <select id="to"><option value="">To…</option></select>
+      <button id="go">Go</button>
+    </div>
+
+    <div class="modes">
+      <button class="mode active" data-mode="foot-walking">🚶 Walk</button>
+      <button class="mode" data-mode="cycling-regular">🚲 Bike</button>
+      <button class="mode" data-mode="driving-car">🚗 Drive</button>
+      <button class="mode" data-mode="public-transport">🚆 Transit</button>
+    </div>
+
+    <div id="info"></div>
   </div>
-  <div class="row">
-    <select id="to"><option value="">To…</option></select>
-    <button id="go">Go</button>
-  </div>
-  <div class="modes">
-    <button class="mode active" data-mode="foot-walking">🚶 Walk</button>
-    <button class="mode" data-mode="cycling-regular">🚲 Bike</button>
-    <button class="mode" data-mode="driving-car">🚗 Drive</button>
-  </div>
-  <div id="info"></div>
-</div>
-<div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
-<script>
-// ---------- Points of interest (name, lat, lon) ----------
-const POINTS = [
-  { name: "Train Station (Gare de Strasbourg)", lat: 48.5851, lon: 7.7346 },
-  { name: "AC Marriott Strasbourg",            lat: 48.5836, lon: 7.7480 },
-  { name: "BOMA Hostel",                        lat: 48.5810, lon: 7.7405 },
-  { name: "Hilton Strasbourg",                  lat: 48.5812, lon: 7.7480 },
-  { name: "IBIS Petite France",                 lat: 48.5796, lon: 7.7412 },
-  { name: "IBIS Styles Nord Palais des Congrès",lat: 48.5960, lon: 7.7390 },
-  { name: "Le Grand Hôtel",                     lat: 48.5838, lon: 7.7450 },
-  { name: "Hôtel de Région Grand Est",          lat: 48.5860, lon: 7.7520 },
-  { name: "Hôtel de Ville",                     lat: 48.5840, lon: 7.7490 },
-  { name: "Palais de la Musique et des Congrès",lat: 48.5960, lon: 7.7380 },
-  { name: "Parlement Européen",                 lat: 48.5970, lon: 7.7690 },
-];
-// ---------- Build the map ----------
-const map = L.map('map').setView([48.586, 7.74], 13);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
-// Markers + a lookup by name
-const byName = {};
-POINTS.forEach(p => {
-  byName[p.name] = p;
-  L.marker([p.lat, p.lon]).addTo(map).bindPopup(`<b>${p.name}</b>`);
-});
-// Fill the dropdowns
-const fromSel = document.getElementById('from');
-const toSel = document.getElementById('to');
-POINTS.forEach(p => {
-  fromSel.add(new Option(p.name, p.name));
-  toSel.add(new Option(p.name, p.name));
-});
-// ---------- Routing ----------
-let control = null;
-let mode = 'foot-walking';
-const info = document.getElementById('info');
-document.querySelectorAll('.mode').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.mode').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    mode = btn.dataset.mode;
-    if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
-  });
-});
-document.getElementById('swap').addEventListener('click', () => {
-  const f = fromSel.value, t = toSel.value;
-  fromSel.value = t; toSel.value = f;
-  if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
-});
-document.getElementById('go').addEventListener('click', () => {
-  if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
-});
-function route(fromName, toName) {
-  const a = byName[fromName], b = byName[toName];
-  if (!a || !b) return;
-  if (control) { map.removeControl(control); control = null; }
-  control = L.Routing.control({
-    waypoints: [L.latLng(a.lat, a.lon), L.latLng(b.lat, b.lon)],
-    router: L.Routing.osrmv1({
-      serviceUrl: 'https://router.project-osrm.org/route/v1',
-      profile: mode
-    }),
-    showAlternatives: false,
-    lineOptions: { styles: [{ color: '#0a7c55', weight: 5 }] },
-    createMarker: () => null
-  }).addTo(map);
-  // Show the time summary in our own box
-  control.on('routesfound', e => {
-    const r = e.routes[0];
-    const km = (r.summary.totalDistance / 1000).toFixed(1);
-    const min = Math.round(r.summary.totalTime / 60);
-    info.style.display = 'block';
-    info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>
-      ${km} km · ~${min} min (${modeLabel(mode)})`;
-  });
-}
-function modeLabel(m) {
-  return { 'foot-walking': 'walking', 'cycling-regular': 'cycling', 'driving-car': 'driving' }[m];
-}
-</script>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+  <script>
+    const FALLBACK_POINTS = [
+      { name: "Train Station (Gare de Strasbourg)", lat: 48.5851, lon: 7.7346 },
+      { name: "AC Marriott Strasbourg", lat: 48.5836, lon: 7.7480 },
+      { name: "BOMA Hostel", lat: 48.5810, lon: 7.7405 },
+      { name: "Hilton Strasbourg", lat: 48.5812, lon: 7.7480 },
+      { name: "IBIS Petite France", lat: 48.5796, lon: 7.7412 },
+      { name: "IBIS Styles Nord Palais des Congrès", lat: 48.5960, lon: 7.7390 },
+      { name: "Le Grand Hôtel", lat: 48.5838, lon: 7.7450 },
+      { name: "Hôtel de Région Grand Est", lat: 48.5860, lon: 7.7520 },
+      { name: "Hôtel de Ville", lat: 48.5840, lon: 7.7490 },
+      { name: "Palais de la Musique et des Congrès", lat: 48.5960, lon: 7.7380 },
+      { name: "Parlement Européen", lat: 48.5970, lon: 7.7690 }
+    ];
+
+    const UMAP_URLS = [
+      'https://umap.openstreetmap.fr/en/map/europa-power-conference-2026_1470534/layers.geojson',
+      'https://umap.openstreetmap.fr/en/map/1470534/layers.geojson'
+    ];
+
+    let pointLookup = {};
+    let routeLines = [];
+    let loadedPoints = [...FALLBACK_POINTS];
+
+    const map = L.map('map').setView([48.586, 7.74], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const fromSel = document.getElementById('from');
+    const toSel = document.getElementById('to');
+    const info = document.getElementById('info');
+
+    function createMarkerForPoint(point) {
+      const marker = L.marker([point.lat, point.lon]).addTo(map);
+      marker.bindPopup(`<b>${point.name}</b>`);
+      return marker;
+    }
+
+    function populateSelectors(points) {
+      const unique = [...new Map(points.map(p => [p.name, p])).values()];
+      fromSel.innerHTML = '<option value="">From…</option>';
+      toSel.innerHTML = '<option value="">To…</option>';
+      unique.forEach(p => {
+        fromSel.add(new Option(p.name, p.name));
+        toSel.add(new Option(p.name, p.name));
+      });
+    }
+
+    function buildFallbackMap() {
+      FALLBACK_POINTS.forEach(p => {
+        pointLookup[p.name] = p;
+        createMarkerForPoint(p);
+      });
+      loadedPoints = FALLBACK_POINTS;
+      populateSelectors(loadedPoints);
+      routeLines = [];
+    }
+
+    function pointNameFromFeature(feature) {
+      const props = feature && feature.properties ? feature.properties : {};
+      const label = props.name || props.title || props.label || props.popupContent || '';
+      return (label || '').trim();
+    }
+
+    function coordinateFromFeature(feature) {
+      if (!feature || !feature.geometry) return null;
+      const g = feature.geometry;
+      if (g.type === 'Point') {
+        return { lat: g.coordinates[1], lon: g.coordinates[0] };
+      }
+      if (g.type === 'LineString' && g.coordinates.length > 0) {
+        const first = g.coordinates[0];
+        return { lat: first[1], lon: first[0] };
+      }
+      return null;
+    }
+
+    function extractPointFeatures(data) {
+      const points = [];
+
+      if (!data || !data.features) return points;
+
+      data.features.forEach(feature => {
+        if (feature.geometry && feature.geometry.type === 'Point') {
+          const name = pointNameFromFeature(feature);
+          if (!name) return;
+          const coord = coordinateFromFeature(feature);
+          if (!coord) return;
+          points.push({ name, lat: coord.lat, lon: coord.lon });
+        }
+      });
+
+      return points;
+    }
+
+    function extractRouteFeatures(data) {
+      const routes = [];
+
+      if (!data || !data.features) return routes;
+
+      data.features.forEach(feature => {
+        const geom = feature && feature.geometry;
+        if (!geom) return;
+
+        if (geom.type === 'LineString' || geom.type === 'MultiLineString') {
+          const name = pointNameFromFeature(feature) || 'Transit route';
+          const coords = geom.type === 'LineString'
+            ? geom.coordinates
+            : geom.coordinates.flat();
+
+          if (coords && coords.length >= 2) {
+            routes.push({
+              name,
+              color: '#1a73e8',
+              coords: coords.map(c => ({ lat: c[1], lon: c[0] }))
+            });
+          }
+        }
+      });
+
+      return routes;
+    }
+
+    function haversineKm(a, b) {
+      const toRad = deg => deg * Math.PI / 180;
+      const R = 6371;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lon - a.lon);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    }
+
+    function buildTransitGraph(points, routes) {
+      const graph = new Map();
+      const routeStops = new Map();
+
+      points.forEach(point => {
+        graph.set(point.name, []);
+      });
+
+      routes.forEach(route => {
+        const routeStopsList = route.coords.map(coord => {
+          let nearestName = null;
+          let nearestDist = Infinity;
+
+          points.forEach(point => {
+            const dist = haversineKm(point, coord);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearestName = point.name;
+            }
+          });
+
+          return nearestName;
+        }).filter(Boolean);
+
+        const uniqueStops = [...new Set(routeStopsList)];
+        routeStops.set(route.name, uniqueStops);
+
+        uniqueStops.forEach((stop, index) => {
+          if (!graph.has(stop)) graph.set(stop, []);
+          if (index + 1 < uniqueStops.length) {
+            const nextStop = uniqueStops[index + 1];
+            graph.get(stop).push({ to: nextStop, route: route.name, color: route.color });
+            graph.get(nextStop).push({ to: stop, route: route.name, color: route.color });
+          }
+        });
+      });
+
+      return graph;
+    }
+
+    function findTransitPath(graph, start, end) {
+      const queue = [{ stop: start, path: [start] }];
+      const visited = new Set([start]);
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        if (current.stop === end) return current.path;
+
+        const neighbors = graph.get(current.stop) || [];
+        neighbors.forEach(next => {
+          if (!visited.has(next.to)) {
+            visited.add(next.to);
+            queue.push({ stop: next.to, path: [...current.path, next.to] });
+          }
+        });
+      }
+
+      return null;
+    }
+
+    function renderTransitRoute(fromName, toName) {
+      if (!pointLookup[fromName] || !pointLookup[toName]) {
+        info.style.display = 'block';
+        info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>Unable to map transit between these locations in the loaded UMap data.`;
+        return;
+      }
+
+      const graph = buildTransitGraph(loadedPoints, routeLines);
+      const path = findTransitPath(graph, fromName, toName);
+
+      if (!path) {
+        info.style.display = 'block';
+        info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>No public transport connection was found in the loaded map data. Try another pair or switch to walking/cycling.`;
+        return;
+      }
+
+      const coords = path.map(p => [pointLookup[p].lat, pointLookup[p].lon]);
+      const line = L.polyline(coords, {
+        color: '#1a73e8',
+        weight: 6,
+        opacity: 0.9,
+        dashArray: '10 12'
+      }).addTo(map);
+
+      line.bindPopup(`<b>${fromName}</b> → <b>${toName}</b><br>Public transport route`);
+      info.style.display = 'block';
+      info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>Transit path: ${path.join(' → ')}`;
+      map.fitBounds(line.getBounds(), { padding: [30, 30] });
+    }
+
+    function clearMapRouteLayers() {
+      map.eachLayer(layer => {
+        if (layer instanceof L.Polyline && layer.options && layer.options.dashArray) {
+          map.removeLayer(layer);
+        }
+      });
+      if (control) {
+        map.removeControl(control);
+        control = null;
+      }
+    }
+
+    let control = null;
+
+    function route(fromName, toName) {
+      const a = pointLookup[fromName];
+      const b = pointLookup[toName];
+      if (!a || !b) return;
+
+      clearMapRouteLayers();
+
+      if (mode === 'public-transport') {
+        renderTransitRoute(fromName, toName);
+        return;
+      }
+
+      control = L.Routing.control({
+        waypoints: [L.latLng(a.lat, a.lon), L.latLng(b.lat, b.lon)],
+        router: L.Routing.osrmv1({
+          serviceUrl: 'https://router.project-osrm.org/route/v1',
+          profile: mode
+        }),
+        showAlternatives: false,
+        lineOptions: { styles: [{ color: '#0a7c55', weight: 5 }] },
+        createMarker: () => null
+      }).addTo(map);
+
+      control.on('routesfound', e => {
+        const r = e.routes[0];
+        const km = (r.summary.totalDistance / 1000).toFixed(1);
+        const min = Math.round(r.summary.totalTime / 60);
+        info.style.display = 'block';
+        info.innerHTML = `<b>${fromName}</b> → <b>${toName}</b><br>${km} km · ~${min} min (${modeLabel(mode)})`;
+      });
+    }
+
+    function modeLabel(m) {
+      return {
+        'foot-walking': 'walking',
+        'cycling-regular': 'cycling',
+        'driving-car': 'driving',
+        'public-transport': 'public transport'
+      }[m];
+    }
+
+    let mode = 'foot-walking';
+
+    document.querySelectorAll('.mode').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        mode = btn.dataset.mode;
+        if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
+      });
+    });
+
+    document.getElementById('swap').addEventListener('click', () => {
+      const f = fromSel.value;
+      const t = toSel.value;
+      fromSel.value = t;
+      toSel.value = f;
+      if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
+    });
+
+    document.getElementById('go').addEventListener('click', () => {
+      if (fromSel.value && toSel.value) route(fromSel.value, toSel.value);
+    });
+
+    async function loadMapData() {
+      const errors = [];
+
+      for (const url of UMAP_URLS) {
+        try {
+          const response = await fetch(url, { mode: 'cors' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+
+          const points = extractPointFeatures(data);
+          const routes = extractRouteFeatures(data);
+
+          if (points.length === 0 && routes.length === 0) {
+            throw new Error('No data found in UMap payload');
+          }
+
+          pointLookup = {};
+          loadedPoints = points.length > 0 ? points : FALLBACK_POINTS;
+          loadedPoints.forEach(p => { pointLookup[p.name] = p; createMarkerForPoint(p); });
+          routeLines = routes;
+          populateSelectors(loadedPoints);
+          info.style.display = 'block';
+          info.innerHTML = 'Loaded locations from the public UMap reference.';
+          return;
+        } catch (err) {
+          errors.push(`${url}: ${err.message}`);
+        }
+      }
+
+      buildFallbackMap();
+      info.style.display = 'block';
+      info.innerHTML = 'Using the built-in fallback points because the live UMap source could not be reached.';
+    }
+
+    buildFallbackMap();
+    loadMapData();
+  </script>
 </body>
 </html>
